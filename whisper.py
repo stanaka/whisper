@@ -32,6 +32,7 @@ import re
 import struct
 import sys
 import time
+import mmap
 
 izip = getattr(itertools, 'izip', zip)
 ifilter = getattr(itertools, 'ifilter', filter)
@@ -555,14 +556,15 @@ def update(path, value, timestamp=None):
   """
   value = float(value)
   with open(path, 'r+b') as fh:
-    return file_update(fh, value, timestamp)
+    map = mmap.mmap(fh.fileno(), 0)
+    return file_update(fh, map, value, timestamp)
 
 
-def file_update(fh, value, timestamp):
+def file_update(fh, map, value, timestamp):
   if LOCK:
     fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
 
-  header = __readHeader(fh)
+  header = __readHeader(map)
   now = int(time.time())
   if timestamp is None:
     timestamp = now
@@ -581,26 +583,26 @@ def file_update(fh, value, timestamp):
   # First we update the highest-precision archive
   myInterval = timestamp - (timestamp % archive['secondsPerPoint'])
   myPackedPoint = struct.pack(pointFormat, myInterval, value)
-  fh.seek(archive['offset'])
-  packedPoint = fh.read(pointSize)
+  map.seek(archive['offset'])
+  packedPoint = map.read(pointSize)
   (baseInterval, baseValue) = struct.unpack(pointFormat, packedPoint)
 
   if baseInterval == 0:  # This file's first update
-    fh.seek(archive['offset'])
-    fh.write(myPackedPoint)
+    map.seek(archive['offset'])
+    map.write(myPackedPoint)
     baseInterval, baseValue = myInterval, value
   else:  # Not our first update
     timeDistance = myInterval - baseInterval
     pointDistance = timeDistance // archive['secondsPerPoint']
     byteDistance = pointDistance * pointSize
     myOffset = archive['offset'] + (byteDistance % archive['size'])
-    fh.seek(myOffset)
-    fh.write(myPackedPoint)
+    map.seek(myOffset)
+    map.write(myPackedPoint)
 
   # Now we propagate the update to lower-precision archives
   higher = archive
   for lower in lowerArchives:
-    if not __propagate(fh, header, myInterval, higher, lower):
+    if not __propagate(map, header, myInterval, higher, lower):
       break
     higher = lower
 
