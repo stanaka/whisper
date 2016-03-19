@@ -26,6 +26,7 @@
 #           Point = timestamp,value
 
 import itertools
+import ftools
 import operator
 import os
 import re
@@ -555,6 +556,7 @@ def update(path, value, timestamp=None):
   """
   value = float(value)
   with open(path, 'r+b') as fh:
+    ftools.fadvise(fh.fileno(),mode="POSIX_FADV_RANDOM")
     return file_update(fh, value, timestamp)
 
 

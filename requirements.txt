@@ -1,0 +1,2 @@
+git+git://github.com/david415/python-ftools.git#egg=ftools
+
